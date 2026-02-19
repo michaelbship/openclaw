@@ -16,10 +16,11 @@ type MarkdownConfigSection = MarkdownConfigEntry & {
 const DEFAULT_TABLE_MODES = new Map<string, MarkdownTableMode>([
   ["signal", "bullets"],
   ["whatsapp", "bullets"],
+  ["discord", "aligned"],
 ]);
 
 const isMarkdownTableMode = (value: unknown): value is MarkdownTableMode =>
-  value === "off" || value === "bullets" || value === "code";
+  value === "off" || value === "bullets" || value === "code" || value === "aligned";
 
 function resolveMarkdownModeFromSection(
   section: MarkdownConfigSection | undefined,

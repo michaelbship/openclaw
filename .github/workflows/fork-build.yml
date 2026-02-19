@@ -1,0 +1,100 @@
+name: Fork Build & Release
+
+# Build OpenClaw with fork patches and publish as a tarball.
+# Agent instances (Midas, Mentor, etc.) pull from the latest release to upgrade.
+
+on:
+  push:
+    branches: [fork-patches]
+  workflow_dispatch: # manual trigger
+
+concurrency:
+  group: fork-build
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed for creating releases
+    steps:
+      - name: Checkout fork-patches
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: false
+
+      - name: Fetch upstream tags
+        run: |
+          git remote add upstream https://github.com/openclaw/openclaw.git || true
+          git fetch upstream --tags --no-recurse-submodules
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        run: corepack enable && corepack prepare pnpm@10.23.0 --activate
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package tarball
+        run: |
+          npm pack
+          TARBALL=$(ls openclaw-*.tgz)
+          echo "TARBALL=$TARBALL" >> $GITHUB_ENV
+          echo "Built tarball: $TARBALL"
+
+      - name: Get version and patch info
+        id: meta
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+
+          # Find the upstream base tag for this version.
+          # First try the exact version tag, then fall back to merge-base with upstream/main.
+          if git rev-parse "v${VERSION}" >/dev/null 2>&1; then
+            BASE_REF="v${VERSION}"
+          elif git rev-parse "upstream/main" >/dev/null 2>&1; then
+            BASE_REF=$(git merge-base HEAD upstream/main 2>/dev/null || echo "")
+          else
+            BASE_REF=""
+          fi
+
+          if [ -n "$BASE_REF" ]; then
+            PATCH_COUNT=$(git rev-list "${BASE_REF}..HEAD" --first-parent --count 2>/dev/null || echo '0')
+          else
+            # Absolute fallback: count commits with fork-specific messages
+            PATCH_COUNT=$(git log --oneline --first-parent HEAD | grep -cv "^$(git log --oneline v${VERSION} -1 2>/dev/null | cut -d' ' -f1)" 2>/dev/null || echo '0')
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "patch_count=$PATCH_COUNT" >> $GITHUB_OUTPUT
+          echo "tag=fork-v${VERSION}-p${PATCH_COUNT}" >> $GITHUB_OUTPUT
+          echo "Summary: v${VERSION} + ${PATCH_COUNT} patches (${SHORT_SHA}), base=${BASE_REF}"
+
+      - name: Create or update release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: "Fork Build — v${{ steps.meta.outputs.version }} + ${{ steps.meta.outputs.patch_count }} patches (${{ steps.meta.outputs.short_sha }})"
+          body: |
+            OpenClaw v${{ steps.meta.outputs.version }} with fork-specific patches.
+
+            **Base:** v${{ steps.meta.outputs.version }}
+            **Patches:** ${{ steps.meta.outputs.patch_count }} commits on top of base
+            **Commit:** ${{ steps.meta.outputs.short_sha }}
+
+            Install on agent VPS:
+            ```bash
+            npm install -g <tarball-url>
+            ```
+          files: ${{ env.TARBALL }}
+          prerelease: false
+          make_latest: true

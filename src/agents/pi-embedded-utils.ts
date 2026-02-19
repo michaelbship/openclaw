@@ -39,6 +39,36 @@ export function stripMinimaxToolCallXml(text: string): string {
  * downgraded to text blocks like `[Tool Call: name (ID: ...)]`. These should
  * not be shown to users.
  */
+
+/**
+ * Strip SSE ping messages that leak into text content from streaming providers.
+ * Providers like OpenRouter send keepalive pings as SSE lines like:
+ * data: {"type":"ping","cost":"0"}
+ * These should not be shown to users.
+ */
+export function stripSsePingMessages(text: string): string {
+  if (!text) {
+    return text;
+  }
+  // Quick check to avoid regex overhead on clean text
+  if (!text.includes('"type"') || !text.includes('"ping"')) {
+    return text;
+  }
+  
+  // Match SSE data: prefix followed by JSON with type:ping
+  const ssePingRe = /data:\s*\{[^}]*"type"\s*:\s*"ping"[^}]*\}/gi;
+  let cleaned = text.replace(ssePingRe, "");
+  
+  // Also match the JSON without the data: prefix (if it leaked through)
+  const pingJsonRe = /\{[^}]*"type"\s*:\s*"ping"[^}]*\}/gi;
+  cleaned = cleaned.replace(pingJsonRe, "");
+  
+  // Clean up any leftover empty lines from the removal
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  
+  return cleaned.trim();
+}
+
 export function stripDowngradedToolCallText(text: string): string {
   if (!text) {
     return text;
@@ -212,7 +242,7 @@ export function extractAssistantText(msg: AssistantMessage): string {
     extractTextFromChatContent(msg.content, {
       sanitizeText: (text) =>
         stripThinkingTagsFromText(
-          stripDowngradedToolCallText(stripMinimaxToolCallXml(text)),
+          stripSsePingMessages(stripDowngradedToolCallText(stripMinimaxToolCallXml(text))),
         ).trim(),
       joinWith: "\n",
       normalizeText: (text) => text.trim(),

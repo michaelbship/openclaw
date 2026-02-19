@@ -172,6 +172,7 @@ export function isCloudflareOrHtmlErrorPage(raw: string): boolean {
 }
 
 export function isTransientHttpError(raw: string): boolean {
+  if (raw.includes('"type":"ping"')) return true;
   const trimmed = raw.trim();
   if (!trimmed) {
     return false;

@@ -1,0 +1,13 @@
+diff --git a/dist/providers/openai-completions.js b/dist/providers/openai-completions.js
+index 8c974317b88de3103d664c321e79bd6e6aa0f169..258c2ad1f8f10a0800ce536842958a3232654598 100644
+--- a/dist/providers/openai-completions.js
++++ b/dist/providers/openai-completions.js
+@@ -128,6 +128,8 @@ export const streamOpenAICompletions = (model, context, options) => {
+                     };
+                     calculateCost(model, output.usage);
+                 }
++                if (!chunk.choices)
++                    continue; // Skip non-standard SSE events (e.g. Z.AI ping keepalives)
+                 const choice = chunk.choices[0];
+                 if (!choice)
+                     continue;

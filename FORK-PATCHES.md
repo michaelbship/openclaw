@@ -5,13 +5,13 @@ agent instances (Midas, Mentor, etc.). It is not tied to any single agent.
 
 ## Current Base
 
-`v2026.2.19` (upstream `openclaw/openclaw`)
+`v2026.2.21` (upstream `openclaw/openclaw`)
 
 ## Active Patches
 
 ### 1. contextTokens refresh on model switch
 
-**Commit:** `492bca54e`
+**Commit:** `1df734256`
 **Files:** `src/sessions/model-overrides.ts`
 **Upstream issues:** #14969, #10278, #8240, #8937 (all still open)
 **Upstream PRs:** #17414 (open, awaiting review)
@@ -29,9 +29,9 @@ Adds a `modelChanged` flag to `applyModelOverrideToSessionEntry()` and calls
 
 ### 2. Aligned table rendering mode for Discord
 
-**Commit:** `b6c5dde0d`
+**Commit:** `ee58c8e9f`
 **Files:** `src/config/types.base.ts`, `src/config/zod-schema.core.ts`,
-           `src/config/markdown-tables.ts`, `src/markdown/ir.ts`
+`src/config/markdown-tables.ts`, `src/markdown/ir.ts`
 **Upstream PR:** None filed
 
 Discord's default table rendering (code blocks or bullets) looks bad. This adds
@@ -53,9 +53,9 @@ Also fixes the Discord chunker eating blank lines between cards.
 
 ### 3. Z.AI SSE ping filter
 
-**Commit:** `6bee63a04`
+**Commit:** `92fa5ff27`
 **Files:** `src/agents/pi-embedded-utils.ts`,
-           `src/agents/pi-embedded-helpers/errors.ts`
+`src/agents/pi-embedded-helpers/errors.ts`
 **Upstream PR:** None filed
 
 Z.AI's streaming API sends SSE keep-alive ping messages that leaked into actual
@@ -67,9 +67,9 @@ AI response content. The stream parser now detects and discards these events.
 
 ### 4. Fork CI workflows
 
-**Commit:** `1a3479b9d`
+**Commit:** `63882194a`
 **Files:** `.github/workflows/fork-build.yml`,
-           `.github/workflows/sync-upstream.yml`
+`.github/workflows/sync-upstream.yml`
 
 - `fork-build.yml`: Builds on every push to `fork-patches`. Fetches upstream
   tags for accurate patch counting. Publishes tarball as GitHub Release tagged
@@ -81,12 +81,39 @@ AI response content. The stream parser now detects and discards these events.
 
 ---
 
+## Dependency Patches (pnpm)
+
+### 5. Guard `chunk.choices` in pi-ai streaming (Z.AI ping crash)
+
+**Package:** `@mariozechner/pi-ai@0.54.0`
+**Patch file:** `patches/@mariozechner__pi-ai@0.54.0.patch`
+**Upstream bug:** unguarded `chunk.choices[0]` in `openai-completions.js`
+
+Z.AI's streaming API sends SSE keep-alive events (`data: {"type":"ping","cost":"0"}`)
+that have no `choices` property. The upstream `pi-ai` package does
+`chunk.choices[0]` without checking if `choices` exists, causing a TypeError
+that sets `stopReason: "error"` even though content was successfully generated.
+
+The patch adds a single guard: `if (!chunk.choices) continue;` before the
+array access, skipping non-standard SSE chunks.
+
+Note: Fork patch #3 (Z.AI SSE ping filter) handles pings at the error
+classification and post-processing layers. This dependency patch fixes the
+crash at the stream consumption layer, which runs before our source patches.
+
+**Drop when:** `@mariozechner/pi-ai` guards `chunk.choices` before indexing
+(check `openai-completions.js` line ~131), OR Z.AI stops sending non-standard
+SSE ping events. The build will fail if the patch no longer applies cleanly
+after a `pi-ai` version bump — that's the signal to check.
+
+---
+
 ## Dropped Patches (absorbed by upstream)
 
-| Patch | Absorbed in |
-|-------|-------------|
+| Patch                                      | Absorbed in                                                                                                                                                                  |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Config contextWindow overrides MODEL_CACHE | `v2026.2.19` — upstream independently implemented `applyConfiguredContextWindows()` and `applyDiscoveredContextWindows()` with identical semantics. PR #17415 can be closed. |
-| Anthropic Sonnet 4.6 model support | `v2026.2.15` |
+| Anthropic Sonnet 4.6 model support         | `v2026.2.15`                                                                                                                                                                 |
 
 ---
 
@@ -142,10 +169,12 @@ branch and update this file.
 ## Rollback
 
 The pre-rebase state is preserved as:
+
 - Branch: `backup/midas-patches-pre-rebase`
 - Tag: `backup/remote-tip-2026-02-19`
 
 To restore:
+
 ```bash
 git push origin backup/midas-patches-pre-rebase:fork-patches --force-with-lease
 ```

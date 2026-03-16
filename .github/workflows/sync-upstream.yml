@@ -22,7 +22,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: fork-patches
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.FORK_PAT }}
 
       - name: Configure git
         run: |

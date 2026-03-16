@@ -5,29 +5,11 @@ agent instances (Midas, Mentor, etc.). It is not tied to any single agent.
 
 ## Current Base
 
-`v2026.2.21` (upstream `openclaw/openclaw`)
+`v2026.3.14` (upstream `openclaw/openclaw`, rebased 2026-03-15)
 
 ## Active Patches
 
-### 1. contextTokens refresh on model switch
-
-**Commit:** `1df734256`
-**Files:** `src/sessions/model-overrides.ts`
-**Upstream issues:** #14969, #10278, #8240, #8937 (all still open)
-**Upstream PRs:** #17414 (open, awaiting review)
-
-When switching models mid-session via alias (e.g. `/sonnet` → `/gflash`),
-`contextTokens` in the session kept the old model's value. This caused context
-overflow or underutilization depending on which direction you switched.
-
-Adds a `modelChanged` flag to `applyModelOverrideToSessionEntry()` and calls
-`lookupContextTokens()` when the model or provider actually changes.
-
-**Drop when:** PR #17414 merges upstream.
-
----
-
-### 2. Aligned table rendering mode for Discord
+### 1. Aligned table rendering mode for Discord
 
 **Commit:** `ee58c8e9f`
 **Files:** `src/config/types.base.ts`, `src/config/zod-schema.core.ts`,
@@ -51,7 +33,7 @@ Also fixes the Discord chunker eating blank lines between cards.
 
 ---
 
-### 3. Z.AI SSE ping filter
+### 2. Z.AI SSE ping filter
 
 **Commit:** `92fa5ff27`
 **Files:** `src/agents/pi-embedded-utils.ts`,
@@ -65,7 +47,7 @@ AI response content. The stream parser now detects and discards these events.
 
 ---
 
-### 4. Fork CI workflows
+### 3. Fork CI workflows
 
 **Commit:** `63882194a`
 **Files:** `.github/workflows/fork-build.yml`,
@@ -75,7 +57,9 @@ AI response content. The stream parser now detects and discards these events.
   tags for accurate patch counting. Publishes tarball as GitHub Release tagged
   `fork-v{VERSION}-p{COUNT}`.
 - `sync-upstream.yml`: Rebases `fork-patches` onto `upstream/main` daily at
-  8am UTC. Creates a GitHub Issue with manual resolution steps on conflict.
+  8am UTC. Uses Claude Code CLI for automated conflict resolution. Creates a
+  GitHub Issue with manual resolution steps if both rebase and LLM fail.
+  Uses `FORK_PAT` secret for push (required for upstream workflow file changes).
 
 **Drop when:** Never (infrastructure patch, always needed).
 
@@ -83,11 +67,15 @@ AI response content. The stream parser now detects and discards these events.
 
 ## Dependency Patches (pnpm)
 
-### 5. Guard `chunk.choices` in pi-ai streaming (Z.AI ping crash)
+### 4. Guard `chunk.choices` in pi-ai streaming (Z.AI ping crash)
 
 **Package:** `@mariozechner/pi-ai@0.54.0`
 **Patch file:** `patches/@mariozechner__pi-ai@0.54.0.patch`
 **Upstream bug:** unguarded `chunk.choices[0]` in `openai-completions.js`
+**Status:** Patch targets `pi-ai@0.54.0` but upstream bumped to `0.58.0`.
+The patch file still exists but won't apply to the new version. Patch #2
+(Z.AI SSE ping filter in source code) is the primary defense. This
+dependency-level patch is currently inactive.
 
 Z.AI's streaming API sends SSE keep-alive events (`data: {"type":"ping","cost":"0"}`)
 that have no `choices` property. The upstream `pi-ai` package does
@@ -97,23 +85,22 @@ that sets `stopReason: "error"` even though content was successfully generated.
 The patch adds a single guard: `if (!chunk.choices) continue;` before the
 array access, skipping non-standard SSE chunks.
 
-Note: Fork patch #3 (Z.AI SSE ping filter) handles pings at the error
-classification and post-processing layers. This dependency patch fixes the
-crash at the stream consumption layer, which runs before our source patches.
+**Action needed:** Create an updated patch for `pi-ai@0.58.0` if the source
+code still lacks this guard, or drop entirely if patch #2 provides sufficient
+protection.
 
-**Drop when:** `@mariozechner/pi-ai` guards `chunk.choices` before indexing
-(check `openai-completions.js` line ~131), OR Z.AI stops sending non-standard
-SSE ping events. The build will fail if the patch no longer applies cleanly
-after a `pi-ai` version bump — that's the signal to check.
+**Drop when:** `@mariozechner/pi-ai` guards `chunk.choices` before indexing,
+OR Z.AI stops sending non-standard SSE ping events.
 
 ---
 
 ## Dropped Patches (absorbed by upstream)
 
-| Patch                                      | Absorbed in                                                                                                                                                                  |
-| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Config contextWindow overrides MODEL_CACHE | `v2026.2.19` — upstream independently implemented `applyConfiguredContextWindows()` and `applyDiscoveredContextWindows()` with identical semantics. PR #17415 can be closed. |
-| Anthropic Sonnet 4.6 model support         | `v2026.2.15`                                                                                                                                                                 |
+| Patch                                      | Absorbed in                                                                                                                                          |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| contextTokens refresh on model switch      | `v2026.3.x` -- upstream merged as #38044 (`fix(sessions): clear stale contextTokens on model switch`). Fork patch dropped during 2026-03-15 rebase.  |
+| Config contextWindow overrides MODEL_CACHE | `v2026.2.19` -- upstream independently implemented `applyConfiguredContextWindows()` and `applyDiscoveredContextWindows()` with identical semantics. |
+| Anthropic Sonnet 4.6 model support         | `v2026.2.15`                                                                                                                                         |
 
 ---
 

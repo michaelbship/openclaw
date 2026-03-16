@@ -65,39 +65,11 @@ AI response content. The stream parser now detects and discards these events.
 
 ---
 
-## Dependency Patches (pnpm)
-
-### 4. Guard `chunk.choices` in pi-ai streaming (Z.AI ping crash)
-
-**Package:** `@mariozechner/pi-ai@0.54.0`
-**Patch file:** `patches/@mariozechner__pi-ai@0.54.0.patch`
-**Upstream bug:** unguarded `chunk.choices[0]` in `openai-completions.js`
-**Status:** Patch targets `pi-ai@0.54.0` but upstream bumped to `0.58.0`.
-The patch file still exists but won't apply to the new version. Patch #2
-(Z.AI SSE ping filter in source code) is the primary defense. This
-dependency-level patch is currently inactive.
-
-Z.AI's streaming API sends SSE keep-alive events (`data: {"type":"ping","cost":"0"}`)
-that have no `choices` property. The upstream `pi-ai` package does
-`chunk.choices[0]` without checking if `choices` exists, causing a TypeError
-that sets `stopReason: "error"` even though content was successfully generated.
-
-The patch adds a single guard: `if (!chunk.choices) continue;` before the
-array access, skipping non-standard SSE chunks.
-
-**Action needed:** Create an updated patch for `pi-ai@0.58.0` if the source
-code still lacks this guard, or drop entirely if patch #2 provides sufficient
-protection.
-
-**Drop when:** `@mariozechner/pi-ai` guards `chunk.choices` before indexing,
-OR Z.AI stops sending non-standard SSE ping events.
-
----
-
 ## Dropped Patches (absorbed by upstream)
 
 | Patch                                      | Absorbed in                                                                                                                                          |
 | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pi-ai `chunk.choices` guard (dep patch)    | `pi-ai@0.58.0` -- upstream now uses `chunk.choices?.[0]` (optional chaining). Patch file and postinstall script removed 2026-03-16.                  |
 | contextTokens refresh on model switch      | `v2026.3.x` -- upstream merged as #38044 (`fix(sessions): clear stale contextTokens on model switch`). Fork patch dropped during 2026-03-15 rebase.  |
 | Config contextWindow overrides MODEL_CACHE | `v2026.2.19` -- upstream independently implemented `applyConfiguredContextWindows()` and `applyDiscoveredContextWindows()` with identical semantics. |
 | Anthropic Sonnet 4.6 model support         | `v2026.2.15`                                                                                                                                         |
